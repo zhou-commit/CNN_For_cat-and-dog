@@ -66,7 +66,7 @@ python train.py
 | batch size | 第 170~175 行 | 64 |
 | 训练轮数 epochs | 第 188 行 | 10 |
 
-- 如果需要预训练，建议1先将 `SMOKE_TEST = False` 改为 `True` 做一次**冒烟测试**（仅取少量样本跑 2 个 epoch，几分钟验证全流程无报错），再改回 `False` 完整训练。
+- 如果需要预训练，建议先将 `SMOKE_TEST = False` 改为 `True` 做一次**冒烟测试**（仅取少量样本跑 2 个 epoch，几分钟验证全流程无报错），再改回 `False` 完整训练。
 - 每个 epoch 结束会在验证集评估，`val_acc` 创新高时保存 `checkpoints/best.pt`，同时保存当轮快照 `cp{epoch}.pt`。
 - 训练结束后自动加载 `best.pt` 在 `cat-dog/test` 上输出 `Test Accuracy`。
 
