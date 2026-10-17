@@ -1,0 +1,30 @@
+# ===== 数据集（约 7500 张图片，体积巨大，GitHub 单文件限 100MB、仓库建议 <1GB）=====
+cat-dog/
+
+# ===== 模型权重（ResNet-18 全量参数，单个约 45MB，非代码不入库，用 Releases 分发）=====
+checkpoints/
+*.pt
+*.pth
+*.onnx
+
+# ===== 训练日志与运行时产物 =====
+train_full.log
+*.log
+.gradio/
+
+# ===== 临时安装的工具库（python-docx --target 目录，可随时重新生成）=====
+tools_docx/
+
+# ===== Python 通用缓存与虚拟环境 =====
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+*.egg-info/
+env/
+venv/
+
+# ===== 敏感信息（防止以后加的密钥/配置类文件误传）=====
+.env
+*.key
+credentials*.json
