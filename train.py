@@ -1,13 +1,11 @@
 # 导入需要的库
-import torch
-import os
+import os,torch,random
 import numpy as np
 import torchvision.transforms as transforms
 import torchvision.models as models
-import random
 from tqdm import tqdm
-from torch.utils.data import DataLoader, random_split, Subset
-from torchvision import datasets
+from torch.utils.data import DataLoader,Subset
+from torchvision.datasets import ImageFolder
 
 '''
 1. 设置随机种子
@@ -47,26 +45,23 @@ train_transform = transforms.Compose([
 
 # 数据集根目录（相对脚本所在目录解析，避免受运行目录影响）
 # cat-dog 已按 train/validate/test 三个子目录分好，每个子目录下有 cat、dog 两类
-DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cat-dog")     #获取数据集的更目录，即demo/cat-dog
+DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cat-dog")     #获取数据集的根目录，即demo/cat-dog
 train_dir = os.path.join(DATA_ROOT, "train")
 val_dir = os.path.join(DATA_ROOT, "validate")
 test_dir = os.path.join(DATA_ROOT, "test")
 
 # 分别构建三个数据集（ImageFolder 会按文件夹名自动编号：cat=0, dog=1）
-train_dataset = datasets.ImageFolder(root=train_dir, transform=train_transform)  #训练集要做额外的数据增强
-val_dataset = datasets.ImageFolder(root=val_dir, transform=transform)
-test_dataset = datasets.ImageFolder(root=test_dir, transform=transform)
-
-# 打印类别到标签的映射，方便推理时对照
-print("类别映射 class_to_idx:", train_dataset.class_to_idx)
+train_dataset = ImageFolder(root=train_dir, transform=train_transform)  #训练集要做额外的数据增强
+val_dataset = ImageFolder(root=val_dir, transform=transform)
+test_dataset = ImageFolder(root=test_dir, transform=transform)
 
 '''
 3.定义模型的训练流程（同时定义测试流程）
 '''
 # 训练模型函数
 def train_model(model, dataloader, criterion, optimizer, val_loader=None, num_epochs=10):
-    # 保存模型的目录（项目内 ./checkpoints，不存在则自动创建）
-    ckpt_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")    #用来存储每一次训练的结果
+    # 保存模型的目录（项目内 ./checkpoints，不存在则自动创建对应模型的目录）
+    ckpt_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'checkpoints',type(model).__name__.lower())
     os.makedirs(ckpt_dir, exist_ok=True)
     best_acc = 0.0
 
@@ -82,48 +77,51 @@ def train_model(model, dataloader, criterion, optimizer, val_loader=None, num_ep
             tepoch.set_description(f"Epoch {epoch+1}/{num_epochs} [train]")
             for i, (inputs, labels) in enumerate(tepoch):
                 inputs, labels = inputs.to(device), labels.to(device)
-                optimizer.zero_grad()  # 梯度清零
+                optimizer.zero_grad()    # 梯度清零
                 outputs = model(inputs)  # 前向传播计算模型输出
                 loss = criterion(outputs, labels)  # 计算损失
-                loss.backward()  # 反向传播计算梯度
-                optimizer.step()  # 更新模型参数
+                loss.backward()    # 反向传播计算梯度
+                optimizer.step()   # 更新模型参数
 
-                running_loss += loss.item()  # 累加损失值
+                running_loss += loss.item()    # 累加损失值
                 _, predicted = outputs.max(1)  # 获取预测结果
-                total += labels.size(0)
-                correct += predicted.eq(labels).sum().item()   #累加概率预测的正确率
+                total += labels.size(0)        # 获取样本总数
+                correct += predicted.eq(labels).sum().item()   # 累加概率预测的正确率
 
-                accuracy = 100. * correct / total    #correct/total代表的就是acc，然后再百分化
+                accuracy = 100. * correct / total    # correct/total代表的就是acc，然后再百分化
                 tepoch.set_postfix(loss=running_loss / (i + 1), accuracy=accuracy)  # 更新进度条显示
                 tepoch.update()
 
         # 每个 epoch 结束后在验证集上评估，验证集用于调整超参数如（学习率。网络层数），并评估是否保存模型
         if val_loader is not None:
-            val_acc = evaluate(model, val_loader)
+            val_acc,val_loss = evaluate(model, val_loader)
             print(f"Epoch {epoch+1}/{num_epochs}  train_loss={running_loss/(i+1):.4f}  "
-                  f"train_acc={accuracy:.2f}%  val_acc={val_acc:.2f}%")
+                  f"train_acc={accuracy:.2f}%  val_acc={val_acc:.2f}% val_loss={val_loss:.4f}  "
+                  f"val_p={np.exp(-val_loss):.4f} ")
             if val_acc > best_acc:       #更新验证集的准确率
                 best_acc = val_acc
-                torch.save(model, os.path.join(ckpt_dir, 'best.pt'))  # 只保留验证集上最优的模型
+                torch.save(model, os.path.join(ckpt_dir, 'best.pt'))        # 只保留验证集上最优的模型
         else:
             print(f"Epoch {epoch+1}/{num_epochs}  train_loss={running_loss/(i+1):.4f}  train_acc={accuracy:.2f}%")
 
         torch.save(model, os.path.join(ckpt_dir, 'cp{}.pt'.format(epoch)))  # 保存每一个epoch的模型
-
 
 def evaluate(model, dataloader):
     """在验证集上评估，返回准确率(%)"""
     model.eval()
     correct = 0
     total = 0
+    running_loss = 0
     with torch.no_grad():
         for inputs, labels in dataloader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            running_loss += loss.item() * labels.size(0)
             _, predicted = outputs.max(1)
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()
-    return 100. * correct / total if total else 0.0
+    return 100. * correct / total if total else 0.0,running_loss/total
 
 def test_model(model, dataloader):
     model.eval()  # 设置模型为评估模式
@@ -137,7 +135,6 @@ def test_model(model, dataloader):
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()
     accuracy = 100. * correct / total
-    print(f'Test Accuracy: {accuracy:.2f}%')
 
 '''
 4. 构建模型 
@@ -152,12 +149,19 @@ num_features = resnet18.fc.in_features
 # 替换最后一层全连接层，使其适应猫狗二分类（cat=0, dog=1）
 resnet18.fc = torch.nn.Linear(num_features, 2)
 
-
 '''
 5. 定义数据集加载的方式
 '''
+# 冻结骨干,冻结除fc层以外的骨干
+FREEZE_FEATURES = True            # 冻结开关
+if FREEZE_FEATURES:
+    for params in resnet18.parameters():
+        params.requires_grad = False
+    for params in resnet18.fc.parameters():
+        params.requires_grad = True
+
 # 冒烟测试开关：置 True 时只取少量样本 + 2 个 epoch，256张图，快速验证整条流程能否跑通
-SMOKE_TEST = False
+SMOKE_TEST = True
 SMOKE_N = 256
 
 if SMOKE_TEST:
@@ -170,20 +174,20 @@ else:
     val_data = val_dataset
 
 # 创建训练集和验证集的数据加载器
-train_loader = DataLoader(train_data, batch_size=64, shuffle=True, drop_last=False, num_workers=2)
-
-val_loader = DataLoader(val_data, batch_size=64, shuffle=False, drop_last=False, num_workers=2)
-
+train_loader = DataLoader(train_data, batch_size=32, shuffle=True, drop_last=True, num_workers=2)
+val_loader = DataLoader(val_data, batch_size=32, shuffle=False, drop_last=False, num_workers=2)
 # 测试集加载器（来自动 cat-dog/test，用于最终评估）
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, drop_last=False, num_workers=2)
-
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, drop_last=False, num_workers=2)
 
 '''
 6. 定义损失函数和优化器
 '''
-# 定义损失函数和优化器
 criterion = torch.nn.CrossEntropyLoss()  # 使用交叉熵损失函数
-optimizer = torch.optim.Adam(resnet18.parameters(), lr=0.001)  # 使用Adam优化器
+if FREEZE_FEATURES:
+    optimizer = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, resnet18.parameters()),lr=1e-4,weight_decay=1e-5) # 优化器只响应没有被冻结的参数
+else:
+    optimizer = torch.optim.Adam(resnet18.fc.parameters(), lr=1e-4)
 
 if __name__ == '__main__':
     # 启动训练
@@ -193,8 +197,9 @@ if __name__ == '__main__':
     train_model(resnet18, train_loader, criterion, optimizer, val_loader=val_loader, num_epochs=epochs)
 
     # 训练完成后在独立测试集上评估
-    ckpt_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
-    best_model = torch.load(os.path.join(ckpt_dir, 'best.pt'), weights_only=False).to(device=device)
-    print("===== 在 cat-dog/test 上评估最优模型 =====")
-    test_model(best_model, test_loader)
+    # ckpt_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'checkpoints','resnet18','best.pt')
+    # best_model = torch.load(os.path.join(ckpt_dir, 'best.pt'), weights_only=False).to(device=device)
+    # print("===== 在 cat-dog/test 上评估最优模型 =====")
+    # test_model(best_model, test_loader)
+    
     

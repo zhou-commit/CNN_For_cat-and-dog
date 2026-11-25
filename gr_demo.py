@@ -1,7 +1,7 @@
 import gradio as gr
-import torch
+import torch,os
 import torchvision.transforms as transforms
-from PIL import Image, ImageDraw, ImageFont
+from PIL import  ImageDraw, ImageFont
 import numpy as np
 import random
 
@@ -19,15 +19,14 @@ set_seed(0)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # 加载训练好的猫狗分类模型（项目内 ./checkpoints/best.pt）
-import os
-ckpt_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints", "best.pt")
+ckpt_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints","resnet", "best.pt")
 model = torch.load(ckpt_path, weights_only=False).to(device=device)
-model.eval()
+model.eval()   # 一定要设置eval，要不然就无法使用训练出来的参数
 
 # 定义图像预处理（必须与训练时一致：先 Resize 再 ToTensor 再 Normalize）
 transform = transforms.Compose([
     transforms.Resize((224, 224)),  # 调整图像大小为224x224
-    transforms.ToTensor(),  # 将图像数据转换为Tensor格式
+    transforms.ToTensor(),          # 将图像数据转换为Tensor格式
     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))  # 标准化图像数据
 ])
 # 类别标签（与 ImageFolder 自动编号一致：cat=0, dog=1）
@@ -35,14 +34,14 @@ class_labels = ["cat", "dog"]
 
 def predict(image):
     """对上传的图片进行分类，并返回带分类结果的图片"""
-    img = transform(image).unsqueeze(0)  # 预处理
+    img = transform(image).unsqueeze(0)  # 这里添加一个第0维，图像在卷积层的输入一定要是一个四维的
     img =img.to(device)
     with torch.no_grad():
         outputs = model(img)
-        probabilities = torch.softmax(outputs, dim=1)  # 计算置信度（Softmax 归一化）
-        confidence, predicted = torch.max(probabilities, 1)
-        label = class_labels[predicted.item()]
-        confidence_score = confidence.item() * 100  # 转换为百分比
+        probabilities = torch.softmax(outputs, dim=1)        # 计算置信度（Softmax 归一化）
+        confidence, predicted = torch.max(probabilities, 1)  # 展开第一维度统计最大的置信度和其标签索引
+        label = class_labels[predicted.item()]               # 将标签索引与类别标签相对应
+        confidence_score = confidence.item() * 100           # 转换为百分比
 
     # 在图片上添加分类结果（上方居中）
     image_with_text = image.copy()

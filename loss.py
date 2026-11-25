@@ -1,6 +1,5 @@
 import torch
 
-
 class CustomMSEloss(torch.nn.Module):
     def __init__(self):
         super(CustomMSEloss, self).__init__()
@@ -15,7 +14,7 @@ def MY_MSEloss(output, target):
 
 
 # 创建模型和数据
-torch.manual_seed(0)
+torch.manual_seed(0)     # 进行结果复现
 model = torch.nn.Linear(1, 1)  # 一个输入特征，一个输出特征
 # criterion_custom = CustomMSEloss()
 criterion_torch = torch.nn.MSELoss()
